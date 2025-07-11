@@ -3,18 +3,29 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\HotelResource;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests as AccessAuthorizesRequests;
-
 use App\Models\Hotel;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 
 class HotelController extends Controller
 {
-        use AccessAuthorizesRequests;
+    use AuthorizesRequests;
+
     public function index()
     {
-        return HotelResource::collection(Hotel::all());
+        $hotels = Hotel::all();
+        return view('hotels.index', compact('hotels'));
+    }
+
+    public function show(Hotel $hotel)
+    {
+        return view('hotels.show', compact('hotel'));
+    }
+
+    public function create()
+    {
+        $this->authorize('create', Hotel::class);
+        return view('admin.hotels.create');
     }
 
     public function store(Request $request)
@@ -27,20 +38,18 @@ class HotelController extends Controller
             'address' => 'required|string',
             'city' => 'required|string',
             'country' => 'required|string',
-            'phone' => 'required|string',
-            'email' => 'required|string|email|unique:hotels',
-            'rating' => 'nullable|numeric|min:1|max:5',
-            'amenities' => 'nullable|array',
+            'rating' => 'required|integer|min:1|max:5',
             'image' => 'nullable|string',
         ]);
 
-        $hotel = Hotel::create($validated);
-        return new HotelResource($hotel);
+        Hotel::create($validated);
+        return redirect()->route('admin.hotels.index')->with('success', 'Hotel created successfully!');
     }
 
-    public function show(Hotel $hotel)
+    public function edit(Hotel $hotel)
     {
-        return new HotelResource($hotel);
+        $this->authorize('update', $hotel);
+        return view('admin.hotels.edit', compact('hotel'));
     }
 
     public function update(Request $request, Hotel $hotel)
@@ -48,26 +57,23 @@ class HotelController extends Controller
         $this->authorize('update', $hotel);
 
         $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
+            'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'address' => 'sometimes|string',
-            'city' => 'sometimes|string',
-            'country' => 'sometimes|string',
-            'phone' => 'sometimes|string',
-            'email' => 'sometimes|string|email|unique:hotels,email,' . $hotel->id,
-            'rating' => 'nullable|numeric|min:1|max:5',
-            'amenities' => 'nullable|array',
+            'address' => 'required|string',
+            'city' => 'required|string',
+            'country' => 'required|string',
+            'rating' => 'required|integer|min:1|max:5',
             'image' => 'nullable|string',
         ]);
 
         $hotel->update($validated);
-        return new HotelResource($hotel);
+        return redirect()->route('admin.hotels.index')->with('success', 'Hotel updated successfully!');
     }
 
     public function destroy(Hotel $hotel)
     {
         $this->authorize('delete', $hotel);
         $hotel->delete();
-        return response()->json(['message' => 'Hotel deleted successfully']);
+        return redirect()->route('admin.hotels.index')->with('success', 'Hotel deleted successfully!');
     }
 }

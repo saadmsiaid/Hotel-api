@@ -3,23 +3,42 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\ReviewResource;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests as AccessAuthorizesRequests;
-
 use App\Models\Review;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 
+/**
+ * @method Authenticatable|null user()
+ */
 class ReviewController extends Controller
 {
-        use AccessAuthorizesRequests;
+    use AuthorizesRequests;
+
     public function index()
     {
-        return ReviewResource::collection(Review::all());
+        /** @var Authenticatable|null $user */
+        $user = auth()->user();
+        $reviews = $user ? Review::where('user_id', $user->id)->get() : collect([]);
+        return view('reviews.index', compact('reviews'));
+    }
+
+    public function create()
+    {
+        $hotels = \App\Models\Hotel::all();
+        $reservations = \App\Models\Reservation::all();
+        return view('reviews.create', compact('hotels', 'reservations'));
     }
 
     public function store(Request $request)
     {
         $this->authorize('create', Review::class);
+
+        /** @var Authenticatable|null $user */
+        $user = auth()->user();
+        if (!$user) {
+            return redirect()->route('login')->withErrors(['error' => 'Please log in.']);
+        }
 
         $validated = $request->validate([
             'hotel_id' => 'required|exists:hotels,id',
@@ -28,16 +47,19 @@ class ReviewController extends Controller
             'comment' => 'nullable|string',
         ]);
 
-        $validated['user_id'] = auth()->id();
+        $validated['user_id'] = $user->id;
         $validated['status'] = 'pending';
 
-        $review = Review::create($validated);
-        return new ReviewResource($review);
+        Review::create($validated);
+        return redirect()->route('reviews.index')->with('success', 'Review submitted successfully!');
     }
 
-    public function show(Review $review)
+    public function edit(Review $review)
     {
-        return new ReviewResource($review);
+        $this->authorize('update', $review);
+        $hotels = \App\Models\Hotel::all();
+        $reservations = \App\Models\Reservation::all();
+        return view('reviews.edit', compact('review', 'hotels', 'reservations'));
     }
 
     public function update(Request $request, Review $review)
@@ -51,13 +73,13 @@ class ReviewController extends Controller
         ]);
 
         $review->update($validated);
-        return new ReviewResource($review);
+        return redirect()->route('reviews.index')->with('success', 'Review updated successfully!');
     }
 
     public function destroy(Review $review)
     {
         $this->authorize('delete', $review);
         $review->delete();
-        return response()->json(['message' => 'Review deleted successfully']);
+        return redirect()->route('reviews.index')->with('success', 'Review deleted successfully!');
     }
 }

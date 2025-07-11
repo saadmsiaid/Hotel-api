@@ -3,24 +3,41 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\PaymentResource;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests as AccessAuthorizesRequests;
-
 use App\Models\Payment;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 
+/**
+ * @method Authenticatable|null user()
+ */
 class PaymentController extends Controller
 {
-    
-        use AccessAuthorizesRequests;
+    use AuthorizesRequests;
+
     public function index()
     {
-        return PaymentResource::collection(Payment::all());
+        /** @var Authenticatable|null $user */
+        $user = auth()->user();
+        $payments = $user ? Payment::where('user_id', $user->id)->get() : collect([]);
+        return view('payments.index', compact('payments'));
+    }
+
+    public function create()
+    {
+        $reservations = \App\Models\Reservation::all();
+        return view('payments.create', compact('reservations'));
     }
 
     public function store(Request $request)
     {
         $this->authorize('create', Payment::class);
+
+        /** @var Authenticatable|null $user */
+        $user = auth()->user();
+        if (!$user) {
+            return redirect()->route('login')->withErrors(['error' => 'Please log in.']);
+        }
 
         $validated = $request->validate([
             'reservation_id' => 'required|exists:reservations,id',
@@ -29,39 +46,17 @@ class PaymentController extends Controller
             'transaction_id' => 'nullable|string',
         ]);
 
-        $validated['user_id'] = auth()->id();
+        $validated['user_id'] = $user->id;
         $validated['status'] = 'pending';
         $validated['payment_date'] = now();
 
-        $payment = Payment::create($validated);
-        return new PaymentResource($payment);
+        Payment::create($validated);
+        return redirect()->route('payments.index')->with('success', 'Payment created successfully!');
     }
 
     public function show(Payment $payment)
     {
-        return new PaymentResource($payment);
-    }
-
-    public function update(Request $request, Payment $payment)
-    {
-        $this->authorize('update', $payment);
-
-        $validated = $request->validate([
-            'amount' => 'sometimes|numeric|min:0',
-            'payment_method' => 'sometimes|in:credit_card,debit_card,paypal,bank_transfer',
-            'status' => 'sometimes|in:pending,completed,failed',
-            'transaction_id' => 'nullable|string',
-            'payment_date' => 'sometimes|date',
-        ]);
-
-        $payment->update($validated);
-        return new PaymentResource($payment);
-    }
-
-    public function destroy(Payment $payment)
-    {
-        $this->authorize('delete', $payment);
-        $payment->delete();
-        return response()->json(['message' => 'Payment deleted successfully']);
+        $this->authorize('view', $payment);
+        return view('payments.show', compact('payment'));
     }
 }

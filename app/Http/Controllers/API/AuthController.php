@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\Request;
@@ -15,6 +14,11 @@ use Illuminate\Support\Facades\Hash;
  */
 class AuthController extends Controller
 {
+    public function showRegisterForm()
+    {
+        return view('auth.register');
+    }
+
     public function register(Request $request)
     {
         $validated = $request->validate([
@@ -29,13 +33,14 @@ class AuthController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        Auth::login($user);
 
-        return response()->json([
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-            'user' => new UserResource($user),
-        ], 201);
+        return redirect()->route('dashboard')->with('success', 'Registration successful!');
+    }
+
+    public function showLoginForm()
+    {
+        return view('auth.login');
     }
 
     public function login(Request $request)
@@ -46,45 +51,35 @@ class AuthController extends Controller
         ]);
 
         if (Auth::attempt($credentials)) {
-            /** @var Authenticatable|null $user */
-            $user = auth()->user();
-            $token = $user->createToken('auth_token')->plainTextToken;
-
-            return response()->json([
-                'access_token' => $token,
-                'token_type' => 'Bearer',
-                'user' => new UserResource($user),
-            ]);
+            $request->session()->regenerate();
+            return redirect()->route('dashboard')->with('success', 'Login successful!');
         }
 
-        return response()->json(['error' => 'Unauthorized'], 401);
+        return back()->withErrors([
+            'email' => 'The provided credentials do not match our records.',
+        ])->onlyInput('email');
     }
 
     public function logout(Request $request)
     {
-        /** @var Authenticatable|null $user */
-        $user = auth()->user();
-        if (!$user) {
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
-
-        $user->currentAccessToken()->delete();
-        return response()->json(['message' => 'Logged out successfully']);
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+        return redirect()->route('home')->with('success', 'Logged out successfully!');
     }
 
-    public function user(Request $request)
+    public function dashboard()
     {
         /** @var Authenticatable|null $user */
         $user = auth()->user();
         if (!$user) {
-            return response()->json(['error' => 'Unauthorized'], 401);
+            return redirect()->route('login')->withErrors(['error' => 'Please log in.']);
         }
-
-        return new UserResource($user);
+        return view('dashboard', compact('user'));
     }
 
-    public function csrfToken(Request $request)
+    public function csrfToken()
     {
-        return response()->json(['csrf_token' => csrf_token()]);
+        return view('csrf'); // Optional, for manual CSRF token testing
     }
 }
